@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Inner Charioteer</title>
+    <style>
+        /* --- THEME VARIABLES --- */
+        :root {
+            --bg-color-dark: #0d1117;
+            --bg-color-medium: #161b22;
+            --bg-color-light: #21262d;
+            --accent-color-primary: #58a6ff;
+            --accent-color-secondary: #a371f7; /* Gita-inspired purple/violet */
+            --text-color-primary: #c9d1d9;
+            --text-color-secondary: #8b949e;
+            --text-color-bot: #e1e8f0; /* Slightly brighter bot text */
+            --user-bubble-bg: #30363d;
+            --bot-bubble-bg: #222a33; /* Slightly different bot bubble */
+            --border-color: #30363d;
+            --error-bg: #4d1a1f;
+            --error-text: #f8d7da;
+            --icon-idle: #8b949e;
+            --icon-active: var(--accent-color-primary);
+            --icon-hover: #b0cfff;
+            --scrollbar-thumb: rgba(100, 120, 150, 0.5);
+            --scrollbar-track: transparent;
+            --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+            /* Add a potential fallback font for Sanskrit transliteration if needed */
+            --font-sanskrit: "Times New Roman", Times, serif; /* Example */
+        }
+
+        /* --- GLOBAL & LAYOUT --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html { font-size: 16px; }
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-color-dark);
+            color: var(--text-color-primary);
+            height: 100vh; /* Use 100dvh for better mobile browser handling */
+            width: 100vw;
+            overflow: hidden;
+            display: flex;
+            /* Subtle background pattern */
+            background-image: radial-gradient(var(--bg-color-medium) 0.6px, transparent 0.6px);
+            background-size: 15px 15px;
+            background-position: 0 0;
+        }
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%; /* Changed from 100vh to fill body */
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: rgba(13, 17, 23, 0.9); /* Slightly more opaque */
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            box-shadow: 0 0 40px rgba(88, 166, 255, 0.15); /* Enhanced shadow */
+            border-left: 1px solid var(--border-color);
+            border-right: 1px solid var(--border-color);
+        }
+
+        /* --- HEADER --- */
+        #header {
+            display: flex;
+            align-items: center;
+            padding: 12px 18px;
+            background-color: rgba(22, 27, 34, 0.85);
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+            user-select: none;
+        }
+        #header-icon {
+            width: 30px; height: 30px; margin-right: 12px;
+            fill: var(--accent-color-secondary); opacity: 0.9;
+            transition: transform 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55); /* Smoother transition */
+        }
+        #header:hover #header-icon { transform: rotate(180deg) scale(1.1); }
+        #header h1 { font-size: 1.2rem; font-weight: 500; letter-spacing: 0.5px; flex-grow: 1; }
+        .header-controls { display: flex; gap: 15px; } /* Increased gap */
+        .icon-button {
+            background: none; border: none; padding: 5px; cursor: pointer;
+            fill: var(--icon-idle); transition: fill 0.2s ease, transform 0.15s ease; outline: none;
+            display: flex; align-items: center; justify-content: center; /* Center icon */
+        }
+        .icon-button:hover:not(:disabled) { fill: var(--icon-hover); }
+        .icon-button:active:not(:disabled) { transform: scale(0.9); }
+        .icon-button svg { width: 24px; height: 24px; display: block; pointer-events: none; }
+        .icon-button.active { fill: var(--icon-active); }
+        .icon-button:disabled { cursor: not-allowed; opacity: 0.4; }
+
+        /* --- CHAT LOG --- */
+        #chat-log {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px; /* Increased gap */
+            scrollbar-width: thin; /* Firefox */
+            scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track); /* Firefox */
+        }
+        #chat-log::-webkit-scrollbar { width: 8px; }
+        #chat-log::-webkit-scrollbar-track { background: transparent; }
+        #chat-log::-webkit-scrollbar-thumb { background-color: var(--scrollbar-thumb); border-radius: 4px; }
+        #chat-log::-webkit-scrollbar-thumb:hover { background-color: rgba(120, 150, 180, 0.7); }
+
+        /* --- MESSAGES --- */
+        .message-container {
+            display: flex;
+            max-width: 88%; /* Slightly wider max */
+            opacity: 0;
+            transform: translateY(15px);
+            animation: slideInFade 0.4s ease-out forwards;
+        }
+        @keyframes slideInFade { to { opacity: 1; transform: translateY(0); } }
+        .message-container.user { justify-content: flex-end; align-self: flex-end; }
+        .message-container.bot { justify-content: flex-start; align-self: flex-start; }
+        .message-bubble {
+            padding: 12px 18px; /* Slightly more padding */
+            border-radius: 20px;
+            line-height: 1.55; /* Improved readability */
+            font-size: 0.98rem; /* Slightly larger font */
+            word-wrap: break-word;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.25); /* Softer shadow */
+            position: relative; /* For potential future elements like copy buttons */
+        }
+        .message-container.user .message-bubble {
+            background-color: var(--user-bubble-bg);
+            color: var(--text-color-primary);
+            border-bottom-right-radius: 6px;
+        }
+        .message-container.bot .message-bubble {
+            background-color: var(--bot-bubble-bg);
+            color: var(--text-color-bot);
+            border-bottom-left-radius: 6px;
+        }
+        /* Styling for potential Sanskrit transliteration */
+        .sanskrit {
+            font-family: var(--font-sanskrit), var(--font-main); /* Use specific font first */
+            font-style: italic; /* Common practice for transliteration */
+            /* color: #b0cfff; */ /* Optional: slightly different color */
+        }
+        .message-bubble strong { font-weight: 600; }
+        .message-bubble em { font-style: italic; }
+
+        .message-container.error .message-bubble {
+            background-color: var(--error-bg);
+            color: var(--error-text);
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+        .message-container.loading .message-bubble {
+             background-color: var(--bot-bubble-bg);
+             padding: 8px 15px; /* Adjusted padding */
+             min-width: 100px; /* Slightly wider */
+        }
+
+        /* --- LOADING INDICATOR --- */
+        .loading-indicator { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 0; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            width: 18px; height: 18px; border-radius: 50%;
+            border: 2.5px solid rgba(88, 166, 255, 0.3);
+            border-top-color: var(--accent-color-primary);
+            animation: spin 0.9s linear infinite;
+        }
+        .loading-text { font-size: 0.85rem; color: var(--text-color-secondary); font-style: italic; }
+        #loading-template { display: none; } /* Keep hidden */
+
+        /* --- INPUT BAR --- */
+        #input-bar {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px; /* Increased padding */
+            border-top: 1px solid var(--border-color);
+            background-color: rgba(22, 27, 34, 0.95);
+            flex-shrink: 0;
+            gap: 12px; /* Increased gap */
+        }
+        #user-input {
+            flex-grow: 1;
+            background-color: var(--bg-color-light);
+            color: var(--text-color-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 22px; /* More rounded */
+            padding: 12px 20px; /* Increased padding */
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease; /* Added shadow transition */
+            resize: none; /* Prevent manual resize if it were a textarea */
+            height: 48px; /* Explicit height */
+            line-height: 1.4; /* Ensure text vertical align */
+        }
+        #user-input:focus {
+            border-color: var(--accent-color-primary);
+            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2); /* Focus ring */
+        }
+        #user-input::placeholder { color: var(--text-color-secondary); opacity: 0.7; }
+        #send-button {
+            padding: 0; width: 44px; height: 44px; border-radius: 50%;
+            background-color: var(--accent-color-primary);
+            display: flex; justify-content: center; align-items: center;
+            border: none; cursor: pointer; flex-shrink: 0;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+        }
+        #send-button svg { width: 20px; height: 20px; fill: var(--bg-color-dark); transform: translateX(1px); } /* Adjust icon position */
+        #send-button:hover:not(:disabled) { background-color: var(--icon-hover); }
+        #send-button:active:not(:disabled) { transform: scale(0.92); }
+        #send-button:disabled { background-color: #484f58 !important; cursor: not-allowed !important; transform: none !important; opacity: 0.6; }
+
+        /* Mic button animation */
+        @keyframes micPulse { 0% { fill: var(--icon-active); transform: scale(1); } 50% { fill: var(--icon-hover); transform: scale(1.1); } 100% { fill: var(--icon-active); transform: scale(1); } }
+        #mic-button.listening { animation: micPulse 1.2s ease-in-out infinite; }
+        #mic-button.listening svg { fill: var(--icon-active); } /* Ensure color when listening */
+
+        /* --- STATUS AREA --- */
+        #status-area {
+            padding: 5px 15px;
+            font-size: 0.8rem;
+            color: var(--text-color-secondary);
+            text-align: center;
+            min-height: 1.6em; /* Ensure consistent height */
+            line-height: 1.6em;
+            background-color: rgba(13, 17, 23, 0.8);
+            flex-shrink: 0;
+            transition: color 0.3s ease, background-color 0.3s ease;
+            user-select: none;
+        }
+         #status-area.active { color: var(--icon-active); }
+         #status-area.error { color: var(--error-text); background-color: rgba(77, 26, 31, 0.5); font-weight: 500; }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <header id="header">
+            <svg id="header-icon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <!-- Simplified Chakra/Wheel Icon -->
+                <circle cx="50" cy="50" r="45" stroke="currentColor" stroke-width="6" fill="none" opacity="0.5"/>
+                <circle cx="50" cy="50" r="15" fill="currentColor" opacity="0.9"/>
+                <g stroke="currentColor" stroke-width="5" opacity="0.7">
+                    <path d="M50 5 V25 M50 95 V75 M95 50 H75 M5 50 H25"/>
+                    <path d="M78.8 21.2 L64.6 35.4 M21.2 78.8 L35.4 64.6 M78.8 78.8 L64.6 64.6 M21.2 21.2 L35.4 35.4"/>
+                </g>
+            </svg>
+            <h1>Inner Charioteer</h1>
+            <div class="header-controls">
+                <button id="speaker-toggle" class="icon-button" title="Toggle Voice Output">
+                    <!-- Speaker Off Icon -->
+                    <svg id="speaker-off-icon" viewBox="0 0 24 24" style="display: block;">
+                         <path fill-rule="evenodd" clip-rule="evenodd" d="M14.707 10.293a1 1 0 0 1 0 1.414l-4 4a1 1 0 0 1-1.414-1.414l4-4a1 1 0 0 1 1.414 0zM4.293 5.707a1 1 0 0 1 1.414-1.414l14 14a1 1 0 0 1-1.414 1.414l-1.457-1.457A6.985 6.985 0 0 1 11 19.95v-2.041l-1.293-1.293A1 1 0 0 1 9.586 16H7a1 1 0 0 1-1-1v-4a1 1 0 0 1 .293-.707L4.293 8.293V10a1 1 0 0 0-1-1H2a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1h.586L1.293 6.707a1 1 0 0 1 0-1.414l1-1a1 1 0 0 1 1.414 0L5 5.586l9.707-9.707a1 1 0 0 1 1.414 1.414L4.293 19.121 2.879 20.535a1 1 0 1 1-1.414-1.414L3.172 17.414 1.464 15.707A1 1 0 0 1 2.878 14.293l1.415 1.414zm10.707-4.414L11 7.586V4a1 1 0 1 0-2 0v4.586l-1.707-1.707A1 1 0 0 0 6 7a1 1 0 0 0-1 1v.293l-1.707-1.707a1 1 0 1 0-1.414 1.414L3.586 9H3a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h1.586l.707.707A3.001 3.001 0 0 0 7 17h2.586l4-4a1 1 0 0 0 .121-.176L15 8.414V6a1 1 0 1 0-2 0v.586zM18 14a4 4 0 0 0-1.172-2.828l-1.414 1.414A2 2 0 0 1 16 14a2 2 0 0 1-.305.95l1.477 1.477A3.988 3.988 0 0 0 18 14zm2.828-2.828a8 8 0 0 0-2.343-5.657l-1.414 1.414A6 6 0 0 1 21 12a6.002 6.002 0 0 1-1.757 4.243l1.414 1.414A7.962 7.962 0 0 0 23 12a7.963 7.963 0 0 0-2.172-5.172z"/>
+                    </svg>
+                    <!-- Speaker On Icon -->
+                    <svg id="speaker-on-icon" viewBox="0 0 24 24" style="display: none;">
+                         <path d="M3 9v6a1 1 0 0 0 1 1h2.586l4.707 4.707a1 1 0 0 0 1.414-1.414L11 18.586V5.414l.707-.707a1 1 0 0 0-1.414-1.414L5.586 8H4a1 1 0 0 0-1 1zm13-1a1 1 0 0 0-2 0v8a1 1 0 0 0 2 0V8zm4 2a1 1 0 0 0-2 0v4a1 1 0 0 0 2 0v-4zm-3.293 4.707a1 1 0 0 0 1.414-1.414 4 4 0 0 0 0-6.586 1 1 0 0 0-1.414 1.414 2 2 0 0 1 0 3.758 1 1 0 0 0 0 1.414zm3.535 1.414a1 1 0 0 0 1.414-1.414 8 8 0 0 0 0-11.314 1 1 0 0 0-1.414 1.414 6 6 0 0 1 0 8.486 1 1 0 0 0 0 1.414z"/>
+                    </svg>
+                </button>
+                <button id="mic-button" class="icon-button" title="Speak Input (Requires Permission)">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm6.4-3c0 3.53-2.61 6.44-6 6.92V22h-1v-3.08c-3.39-.48-6-3.39-6-6.92H4c0 4.41 3.1 8.04 7 8.9V22h2v-1.1c3.9-.86 7-4.49 7-8.9h-1.6z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+        <div id="chat-log">
+            <!-- Initial message will be added here -->
+        </div>
+        <div id="loading-template">
+            <div class="loading-indicator">
+                <div class="spinner"></div>
+                <div class="loading-text">Seeking wisdom...</div>
+            </div>
+        </div>
+        <div id="input-bar">
+             <!-- Mic button moved to the left for better flow with input field -->
+            <input type="text" id="user-input" placeholder="Share your thoughts..." autocomplete="off">
+            <button id="send-button" aria-label="Send message">
+                <svg viewBox="0 0 24 24">
+                    <path d="M3.4 20.4l17.45-7.48c.81-.35.81-1.49 0-1.84L3.4 3.6c-.66-.29-1.39.2-1.39.91L2 10l15 2-15 2 .01 5.49c0 .71.73 1.2 1.39.91z"/> <!-- Updated Send Icon -->
+                </svg>
+            </button>
+        </div>
+        <div id="status-area">Initializing...</div>
+    </div>
+
+    <script>
+        'use strict';
+
+        // --- Global Error Handling ---
+        window.addEventListener('error', function(event) {
+            console.error('GLOBAL UNCAUGHT ERROR:', event.message, event.filename, event.lineno, event.colno, event.error);
+            const statusArea = document.getElementById('status-area');
+            if (statusArea) {
+                statusArea.textContent = `Critical Error! Check console. App halted.`;
+                statusArea.classList.add('error');
+            }
+            const sendBtn = document.getElementById('send-button');
+            const userInput = document.getElementById('user-input');
+            const micBtn = document.getElementById('mic-button');
+            if(sendBtn) sendBtn.disabled = true;
+            if(userInput) userInput.disabled = true;
+            if(micBtn) micBtn.disabled = true;
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("DEBUG: DOMContentLoaded - Initializing Inner Charioteer...");
+
+            // --- Configuration ---
+            const GEMINI_API_MODEL = "gemini-1.5-flash-latest";
+            const GEMINI_API_ENDPOINT_BASE = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_API_MODEL}:generateContent`;
+            const MAX_HISTORY_TURNS = 6;
+            const MAX_TOKENS_DRAFT = 350;
+            const MAX_TOKENS_CRITIQUE = 200;
+            const MAX_TOKENS_REFINE = 400;
+            const DEFAULT_USER_NAME = "Arjuna"; // Default name if none provided
+
+            // --- Element Selection ---
+            const chatLog = document.getElementById('chat-log');
+            const userInput = document.getElementById('user-input');
+            const sendButton = document.getElementById('send-button');
+            const loadingTemplateContent = document.getElementById('loading-template')?.innerHTML;
+            const micButton = document.getElementById('mic-button');
+            const speakerToggleButton = document.getElementById('speaker-toggle');
+            const speakerOnIcon = document.getElementById('speaker-on-icon');
+            const speakerOffIcon = document.getElementById('speaker-off-icon');
+            const statusArea = document.getElementById('status-area');
+
+            // --- Essential Element Check ---
+             const requiredElements = { chatLog, userInput, sendButton, micButton, speakerToggleButton, speakerOnIcon, speakerOffIcon, statusArea };
+            let missingElement = false;
+            for (const [name, element] of Object.entries(requiredElements)) {
+                if (!element) { console.error(`INIT ERROR: HTML element '#${name}' not found!`); missingElement = true; }
+            }
+            if (!loadingTemplateContent) { console.error("INIT ERROR: HTML element '#loading-template' content not found!"); missingElement = true; }
+            if (missingElement) {
+                updateStatus("Initialization Error: UI elements missing. App cannot start.", true);
+                Object.values(requiredElements).forEach(el => { if (el) el.disabled = true; });
+                if (userInput) userInput.disabled = true; if (sendButton) sendButton.disabled = true; if (micButton) micButton.disabled = true;
+                return;
+            }
+            console.log("DEBUG: All essential HTML elements verified.");
+
+            // --- State Variables ---
+            let apiKey = null;
+            let conversationHistory = []; // Stores { role: 'user'/'model', parts: [{ text: '...' }] }
+            let isVoiceOutputEnabled = false;
+            let isListening = false;
+            let recognition = null;
+            let isProcessing = false;
+            let synth = window.speechSynthesis;
+            let voices = [];
+            let preferredVoice = null;
+            let isSpeechRecognitionApiAvailable = ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+            let isSpeechSynthesisApiAvailable = ('speechSynthesis' in window);
+            let currentAbortController = null;
+            // ** NEW State for Name Handling **
+            let userName = null; // Stores the user's name for the session
+            let askedForName = false; // Flag to track if we've asked for the name
+
+            // --- Core Persona & Prompts (Structured for Gemini API) ---
+            // *** UPDATED with Phased Approach, Integrated Wisdom, Name Handling, etc. ***
+            const corePersonaAndGitaContext = `
+            **Source of Wisdom:** Bhagavad Gita (interpretive style inspired by Gita Press/Sadhak Sanjivani, adapted for modern context).
+            **Core Principles:** Focus on key Gita concepts like the nature of the Self (Atman) vs. the temporary body/mind, the law of Karma, one's intrinsic duty (Dharma), the three Gunas (Sattva, Rajas, Tamas), the importance of detachment from outcomes, overcoming attachment/aversion/ignorance, and the paths of Yoga (Karma, Jnana, Bhakti).
+            **Persona:** Embody the essence of Krishna as depicted in the Mahabharata and Gita: a divine guide who is wise, serene, compassionate, yet also possesses a calm authority, profound understanding of human nature, and a touch of insightful wit or playfulness (*leela*). Maintain unwavering composure and a perspective that sees beyond the immediate turmoil. Be patient and empathetic, but avoid sentimentality. Your wisdom should feel inherent, not just learned. Address the user as [User Name].
+            **Identity:** Be subtle and indirect about identity. NEVER explicitly state "I am Krishna" or refer to yourself as a deity or avatar. Imply wisdom and the divine perspective through the *content*, *tone*, and *manner* of your responses, not through direct claims. Gently deflect personal questions about your identity (e.g., "Focus rests on your path, [User Name], not on the nature of the guide.").
+            **Language:** Use simple, clear, profound language. Avoid unnecessary jargon or overly complex philosophical terms. Explain concepts accessibly. Your words should carry weight through their insight, not complexity. Avoid exaggeration.
+            **Interaction Style & Phasing:**
+                *   **Initial Turns:** Focus on listening to [User Name]. Acknowledge their words. Ask clarifying questions if needed. Offer *brief* initial reflections or gentle prompts for deeper thought. Avoid long discourses immediately. Show you are seeking to understand their state of mind first.
+                *   **Subsequent Turns:** Once the context is clearer, offer deeper insights, perspective shifts, or relevant analogies grounded in Gita's wisdom, tailored to [User Name]'s situation. Maintain conciseness appropriate to the conversation flow.
+            **Handling Vague Input:** If [User Name]'s input is unclear, nonsensical ("blahblahblah"), or avoids a direct question, do not overanalyze it. Respond with gentle, perhaps witty, encouragement for clarity. Nudge them directly but kindly to state their query plainly (e.g., "Speak plainly, [User Name], what truly troubles your heart?" or "These scattered words are like arrows loosed without aim, [User Name]. What is the true target of your thoughts?").
+            **Response Requirements:**
+            1.  **Language Matching:** Detect the language of [User Name]'s *last* message. Your entire response MUST be in that *same* detected language.
+            2.  **Conciseness & Depth:** Be concise yet profound, especially in initial responses. Avoid clichés and superficial answers. Ensure the response is insightful and directly relevant to [User Name]'s specific input.
+            3.  **Wisdom Integration (Shlokas):** Do NOT cite chapter/verse numbers (like "Gita 2.47"). Instead, *integrate the wisdom and essence* of relevant Gita teachings directly into your own words as natural expressions of your perspective. Use this technique thoughtfully.
+            4.  **Optional Sanskrit (Use Very Sparingly):** Only for a truly pivotal verse where the original sound adds significant weight, you may *recall* the Sanskrit using IAST transliteration wrapped in <span class='sanskrit'></span> tags (e.g., "Remember the essence, <span class='sanskrit'>karmaṇy-evādhikāras te mā phaleṣu kadācana</span>..."). Immediately follow with a *brief, contextual explanation* of its relevance to [User Name]'s current situation, in the conversation language. Use this extremely rarely.
+            **Strict Constraints:**
+            1.  **Gita Exclusivity:** ALL guidance MUST be directly derived from or clearly aligned with the Bhagavad Gita.
+            2.  **No External Advice:** Do NOT provide generic advice, pop psychology, medical/financial/legal suggestions, personal opinions, etc.
+            3.  **Maintain Persona:** Consistently adhere to ALL specified persona attributes. Do not break character.
+            4.  **User Focus:** Keep the conversation centered on [User Name]'s expressed needs.
+            5.  **Safety:** Avoid harmful, unethical, or inappropriate content.`;
+
+            // Function to inject the current user name into prompts
+            function injectUserName(promptText) {
+                const nameToUse = userName || DEFAULT_USER_NAME;
+                // Use a regex to replace all occurrences of [User Name]
+                return promptText.replace(/\[User Name\]/g, nameToUse);
+            }
+
+            // System prompts now defined as functions to allow dynamic name injection
+            const getDrafterSystemInstruction = () => ({
+                role: "user",
+                parts: [{ text: injectUserName(`**Role:** Initial Drafter (Krishna Persona - Step 1 of 3)\n${corePersonaAndGitaContext}\n**Task:** Read the current user message ([User Name]'s input) and relevant conversation history. Generate a thoughtful, initial draft response strictly adhering to the Krishna persona and ALL response requirements (language matching, phased interaction, conciseness/depth, wisdom integration rules, handling vague input) and constraints defined above. Ground the core message in Bhagavad Gita principles. Focus on understanding [User Name]'s underlying need. If this is the very first substantial user message and the name hasn't been asked yet, *also* gently ask for their name as part of the response (e.g., "Before we delve deeper, [User Name], by what name may I know you?"). Aim for a good first attempt, prioritizing persona depth, Gita connection, and all specific response requirements.`) }]
+            });
+
+            const getCriticSystemInstruction = () => ({
+                role: "user",
+                parts: [{ text: injectUserName(`**Role:** Quality Assurance Critic (Step 2 of 3)\n**Task:** Evaluate the provided Draft Response based *only* on the following checklist, considering the User Query ([User Name]'s input) that prompted it. Output *only* the critique points that FAIL, using the exact format "Critique: [Specific Issue Found]. Suggestion: [Brief, actionable improvement idea]". If all checks pass, output exactly "Critique: None. Suggestion: Response meets criteria." Be strict and objective.\n\n**Checklist:**\n1. Language Match: Does the draft response language match [User Name]'s query language? (YES/NO)\n2. Gita Grounding: Is the core message explicitly derived from a Gita principle? Is the connection clear and accurate? (YES/NO)\n3. Persona - Tone & Depth: Is the tone appropriate (calm, wise, compassionate but not sentimental, authoritative yet gentle)? Does it exhibit depth and avoid clichés? Does it incorporate appropriate wit/playfulness if [User Name]'s input warrants it? Does it address [User Name] correctly? (YES/NO)\n4. Persona - Identity: Does it avoid explicit claims of divinity? Is the identity subtle/implied? (YES/NO)\n5. Persona - Language: Is the language simple, clear, profound, and free of unnecessary jargon/exaggeration? (YES/NO)\n6. Guidance Style & Phasing: Does it primarily guide/reflect appropriately for the conversation stage (brief initially, deeper later)? (YES/NO)\n7. Conciseness & Relevance: Is the response concise yet insightful, directly addressing [User Name]'s input? (YES/NO)\n8. Wisdom Integration (If Used): Is Gita wisdom integrated naturally? If Sanskrit (<span class='sanskrit'></span>) is used (should be rare): Is it accurate? Is the contextual explanation clear, brief, relevant? (YES/NO/NA)\n9. User Focus: Is the response centered on [User Name]'s query/feelings through a Gita lens? (YES/NO)\n10. Constraint Adherence: Does it strictly avoid generic advice, pop psychology, personal opinions, and external information? (YES/NO)\n11. Handling Vague Input: If [User Name]'s input was vague/nonsensical, does the response handle it appropriately (e.g., witty prompt for clarity) rather than overanalyzing? (YES/NO/NA)\n12. Asked for Name (If Applicable): If this was the first interaction and name wasn't known, did the draft gently ask for [User Name]'s name? (YES/NO/NA)\n\n**Input Format (You will receive this):**\nUser Query: [User's latest message]\nDraft Response: [AI's first attempt]\n\n**Output Format (Strict):**\nCritique: [Issue 1]. Suggestion: [Suggestion 1]\nCritique: [Issue 2]. Suggestion: [Suggestion 2]\n...\nOR\nCritique: None. Suggestion: Response meets criteria.`) }]
+            });
+
+             const getRefinerSystemInstruction = () => ({
+                role: "user",
+                parts: [{ text: injectUserName(`**Role:** Response Refiner (Krishna Persona - Step 3 of 3)\n${corePersonaAndGitaContext}\n**Task:** Rewrite the original Draft Response to create the FINAL answer for [User Name], meticulously incorporating the feedback from the Critique. \n- Address *all* points raised in the Critique, ensuring the final output passes *all* checks from the critic's list (including language match, **persona depth/wit**, **phased response length**, **correct wisdom integration/referencing**, **handling of vague input**, **addressing [User Name]**).\n- If Critique is "None", simply pass the Draft Response through, perhaps with minor polish for flow or persona consistency, ensuring it meets all persona requirements (especially **simplicity, depth, appropriate wit, and addressing [User Name]**).\n- Ensure the FINAL response PERFECTLY adheres to ALL aspects of the core persona, response requirements, and constraints.\n- Maintain the core Gita message from the draft unless the critique specifically identified it as flawed.\n- Output ONLY the final, refined response, ready for [User Name]. Do not include any introductory phrases like "Here is the refined response:".\n\n**Input Format (You will receive this):**\nUser Query: [User's latest message]\nDraft Response: [AI's first attempt]\nCritique and Suggestions: [Output from Critic]\n\n**Output:**\n[Your Final, Refined Response]`) }]
+            });
+
+            console.log("DEBUG: System prompts updated for phased response, integrated wisdom, and name handling.");
+
+            // --- UI Update Functions ---
+            function updateStatus(message, isError = false, isActive = false) {
+                if (!statusArea) return;
+                statusArea.textContent = message;
+                statusArea.classList.toggle('error', isError);
+                statusArea.classList.toggle('active', isActive && !isError); // 'active' style only if not an error
+            }
+
+            function disableInput(caller = 'unknown') {
+                console.log(`DEBUG: Disabling input (Called by: ${caller})`);
+                userInput.disabled = true;
+                sendButton.disabled = true;
+                if (micButton) micButton.disabled = true; // Always disable mic when input is disabled
+            }
+
+            function enableInput(caller = 'unknown') {
+                // Only enable if not currently processing an AI response
+                if (!isProcessing) {
+                    console.log(`DEBUG: Enabling input (Called by: ${caller})`);
+                    userInput.disabled = false;
+                    sendButton.disabled = !userInput.value.trim(); // Enable send only if there's text
+
+                    // Enable mic only if API is available AND not currently listening
+                    if (micButton) {
+                        micButton.disabled = !(isSpeechRecognitionApiAvailable && !isListening);
+                    }
+                } else {
+                    console.log(`DEBUG: Input enable skipped - still processing (Caller: ${caller})`);
+                }
+            }
+
+            // Debounce send button enable/disable based on input
+            let inputDebounceTimer;
+            userInput.addEventListener('input', () => {
+                clearTimeout(inputDebounceTimer);
+                inputDebounceTimer = setTimeout(() => {
+                    if (!isProcessing && !userInput.disabled) {
+                         sendButton.disabled = !userInput.value.trim();
+                    }
+                }, 150); // Adjust delay as needed
+            });
+
+
+            function scrollToBottom() {
+                // Use requestAnimationFrame for smoother scrolling after DOM updates
+                requestAnimationFrame(() => {
+                    chatLog.scrollTo({ top: chatLog.scrollHeight, behavior: 'smooth' });
+                });
+            }
+
+            function addMessage(text, type) {
+                 console.log(`DEBUG: Adding message - Type: ${type}, Text: ${text?.substring(0, 50)}...`);
+                 if (!chatLog) return null;
+                 try {
+                    const container = document.createElement('div');
+                    container.classList.add('message-container', type);
+
+                    const bubble = document.createElement('div');
+                    bubble.classList.add('message-bubble');
+
+                    if (type === 'error') {
+                         container.classList.add('error'); // Add error class to container too if needed
+                         bubble.textContent = `Error: ${text}`;
+                    } else {
+                         // Handle potential HTML (like the sanskrit span) and basic markdown
+                         const tempDiv = document.createElement('div');
+                         // Assign raw text first to let browser handle basic escaping needed for setting textContent
+                         tempDiv.textContent = text;
+                         // Get the potentially escaped text back as HTML
+                         let processedHtml = tempDiv.innerHTML;
+                         // Now apply markdown/sanskrit replacements on this safer HTML string
+                         // Decode the specific span tag, assuming it was potentially encoded by textContent->innerHTML
+                         processedHtml = processedHtml.replace(/&lt;span class=('|")sanskrit\1&gt;(.*?)&lt;\/span&gt;/g, "<span class='$1sanskrit$1'>$2</span>");
+                         processedHtml = processedHtml.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                         processedHtml = processedHtml.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                         bubble.innerHTML = processedHtml; // Set the final processed HTML
+                    }
+
+                    container.appendChild(bubble);
+                    chatLog.appendChild(container);
+                    scrollToBottom();
+
+                    // Speak the message if it's from the bot and voice output is enabled
+                    // Strip HTML tags before speaking for cleaner audio
+                    if (type === 'bot' && isVoiceOutputEnabled && text) {
+                        const textToSpeak = text.replace(/<[^>]*>/g, ""); // Remove HTML tags
+                        speak(textToSpeak);
+                    }
+                    return container; // Return the container element
+                 } catch (error) {
+                    console.error("DEBUG: Error in addMessage:", error);
+                    // Try adding a plain text error message if formatting failed
+                    try {
+                        const errorContainer = document.createElement('div');
+                        errorContainer.classList.add('message-container', 'error');
+                        const errorBubble = document.createElement('div');
+                        errorBubble.classList.add('message-bubble');
+                        errorBubble.textContent = `Error displaying message. See console.`;
+                        errorContainer.appendChild(errorBubble);
+                        chatLog.appendChild(errorContainer);
+                        scrollToBottom();
+                    } catch (finalError) {
+                        console.error("DEBUG: Failed even to add error message:", finalError);
+                    }
+                    return null;
+                 }
+            }
+
+             function showLoadingIndicator(initialText = "Processing...") {
+                 console.log("DEBUG: Showing loading indicator.");
+                 if (!chatLog || !loadingTemplateContent) {
+                     console.error("DEBUG: Cannot show loading indicator - chatLog or template missing.");
+                     return null;
+                 }
+                 try {
+                    // Remove any existing loading indicator first
+                    removeLoadingIndicator();
+
+                    const container = document.createElement('div');
+                    // Use a unique ID for potential targeting
+                    container.id = `loading-${Date.now()}`;
+                    container.classList.add('message-container', 'bot', 'loading');
+
+                    const bubble = document.createElement('div');
+                    bubble.classList.add('message-bubble');
+                    // Clone the template content instead of using innerHTML directly
+                    const template = document.createElement('div');
+                    template.innerHTML = loadingTemplateContent;
+                    const indicatorNode = template.firstElementChild; // Get the actual node
+
+                    if (indicatorNode) {
+                         const textElement = indicatorNode.querySelector('.loading-text');
+                         if (textElement) textElement.textContent = initialText;
+                         bubble.appendChild(indicatorNode); // Append the cloned node
+                         container.appendChild(bubble);
+                         chatLog.appendChild(container);
+                         scrollToBottom();
+                         return container; // Return the container element
+                    } else {
+                        throw new Error("Loading template content is empty or invalid.");
+                    }
+                 } catch(error) {
+                     console.error("DEBUG: Error showing loading indicator:", error);
+                     addMessage("Error displaying loading state.", 'error');
+                     return null;
+                 }
+             }
+
+             function updateLoadingMessage(loadingElement, newText) {
+                 if (!loadingElement) {
+                     // console.warn("DEBUG: updateLoadingMessage: Invalid loadingElement provided.");
+                     // Try to find the loading element if not passed directly
+                     loadingElement = chatLog?.querySelector('.message-container.loading');
+                     if (!loadingElement) {
+                         console.warn("DEBUG: updateLoadingMessage: Could not find active loading element.");
+                         return;
+                     }
+                 }
+                 try {
+                     const textElement = loadingElement.querySelector('.loading-text');
+                     if (textElement) {
+                         textElement.textContent = newText;
+                     } else {
+                         console.warn("DEBUG: updateLoadingMessage: .loading-text element not found within the loading indicator.");
+                     }
+                 } catch (error) {
+                     console.error("DEBUG: Error updating loading message:", error);
+                 }
+             }
+
+             function removeLoadingIndicator() {
+                 // console.log("DEBUG: Attempting to remove loading indicator.");
+                 const loadingElement = chatLog?.querySelector('.message-container.loading');
+                 if (loadingElement) {
+                     try {
+                         loadingElement.remove();
+                         // console.log("DEBUG: Loading indicator removed.");
+                     } catch (error) {
+                         console.error("DEBUG: Error removing loading indicator:", error);
+                     }
+                 } else {
+                     // console.log("DEBUG: No active loading indicator found to remove.");
+                 }
+             }
+
+            // --- Gemini API Interaction ---
+
+            // Function to structure history correctly for the API
+            function formatHistoryForGemini(history) {
+                // Ensure strict user/model alternation, starting with user
+                let formatted = [];
+                let lastRole = 'model'; // Assume bot spoke last before the current user turn
+                for (const turn of history) {
+                    // Simple validation of turn structure
+                    if (turn && turn.role && turn.parts && Array.isArray(turn.parts) && turn.parts.length > 0 && turn.parts[0].text !== undefined) {
+                         // Inject user name into past model responses for context if needed (optional)
+                        // if (turn.role === 'model') {
+                        //     turn.parts[0].text = injectUserName(turn.parts[0].text);
+                        // }
+                        if (turn.role === 'user' && lastRole !== 'user') {
+                            formatted.push(turn);
+                            lastRole = 'user';
+                        } else if (turn.role === 'model' && lastRole !== 'model') {
+                            formatted.push(turn);
+                            lastRole = 'model';
+                        } else {
+                            console.warn(`DEBUG: History Correction - Skipping duplicate role '${turn.role}'. Content: ${turn.parts[0]?.text?.substring(0, 30)}...`);
+                        }
+                    } else {
+                         console.warn(`DEBUG: History Correction - Skipping invalid turn structure:`, turn);
+                    }
+                }
+                return formatted;
+            }
+
+            async function callGeminiAPI(requestContents, maxTokens, temperature, stepName = "API Call") {
+                 console.log(`DEBUG: ${stepName} - Calling Gemini API. Max Tokens: ${maxTokens}, Temp: ${temperature}`);
+                 if (!apiKey) {
+                     console.error("API Error: API Key is missing.");
+                     return { error: "API Key is missing. Please reload and provide one." };
+                 }
+
+                 // Abort previous request if any
+                 currentAbortController?.abort();
+                 currentAbortController = new AbortController();
+                 const signal = currentAbortController.signal;
+
+                 const API_ENDPOINT = `${GEMINI_API_ENDPOINT_BASE}?key=${apiKey}`; // Uses the corrected v1beta endpoint
+
+                 const requestBody = {
+                      // **Important**: Inject user name into system prompts just before sending
+                      contents: requestContents.map(turn => {
+                          if (turn.role === 'user' && turn.parts[0].text.startsWith('**Role:**')) {
+                              // This is likely one of our system instruction turns
+                              return { role: turn.role, parts: [{ text: injectUserName(turn.parts[0].text) }] };
+                          }
+                          return turn; // Keep user/model history turns as they are
+                      }),
+                      generationConfig: {
+                          temperature: temperature,
+                          topP: 0.95,
+                          topK: 40,
+                          maxOutputTokens: maxTokens,
+                          // stopSequences: [], // Optional: sequences to stop generation
+                      },
+                      safetySettings: [ // Slightly stricter safety settings might be appropriate
+                        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+                        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+                        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+                        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
+                      ]
+                 };
+
+                 console.log(`DEBUG: ${stepName} - Request Body Contents (First Turn Snippet):`, JSON.stringify(requestBody.contents[0]).substring(0, 300) + "...");
+
+
+                 try {
+                     const response = await fetch(API_ENDPOINT, {
+                         method: "POST",
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(requestBody),
+                         signal: signal // Pass the abort signal
+                     });
+
+                     if (signal.aborted) {
+                         console.log(`DEBUG: ${stepName} - API call aborted.`);
+                         return { error: "Request cancelled.", aborted: true };
+                     }
+
+                     // Check for non-OK status codes first
+                     if (!response.ok) {
+                         let errorBody = null;
+                         let errorText = `HTTP error ${response.status}`;
+                         try {
+                             errorBody = await response.json();
+                             errorText = errorBody?.error?.message || errorText;
+                             console.error(`API Error ${response.status}:`, errorBody);
+                         } catch (e) {
+                             console.error(`API Error ${response.status}: Could not parse error response body.`);
+                             // Try to get raw text if JSON parsing fails
+                             try { errorText = await response.text(); } catch(e2) {}
+                         }
+                         return { error: `API Error (${stepName}): ${errorText}` };
+                     }
+
+                     const data = await response.json();
+                     // console.log(`DEBUG: ${stepName} - API Response Data:`, JSON.stringify(data)); // Log full response if needed for deep debug
+
+                     // **Crucial Check**: Check for promptFeedback first (indicates issues with the *input*)
+                     if (data.promptFeedback && data.promptFeedback.blockReason) {
+                         console.warn(`API Warning (${stepName}): Prompt blocked due to ${data.promptFeedback.blockReason}`, data.promptFeedback.safetyRatings);
+                         return { text: `(My guidance based on your input was withheld due to safety filters: ${data.promptFeedback.blockReason}. Please rephrase your request.)`, safetyBlocked: true };
+                     }
+
+                     // **Check Candidates**: Ensure candidates array exists
+                     if (!data.candidates || data.candidates.length === 0) {
+                           // This can happen if the *response* was blocked, even if the prompt was okay.
+                           console.warn(`API Warning (${stepName}): No candidates returned. This might indicate a response block or other issue. Response:`, data);
+                           // Check if promptFeedback exists even without blockReason (might have ratings)
+                           if(data.promptFeedback?.safetyRatings) {
+                               console.warn(`Safety ratings on promptFeedback:`, data.promptFeedback.safetyRatings);
+                           }
+                           // Check for finishReason in promptFeedback as well (less common)
+                           const finishReason = data.promptFeedback?.blockReason || 'Unknown (No Candidates)';
+                           return { error: `API Error (${stepName}): No response generated by the AI (Reason: ${finishReason}). It might have been blocked.` };
+                     }
+
+                     const candidate = data.candidates[0];
+
+                     // **Check Candidate Finish Reason**: Safety block on the *output*
+                      if (candidate.finishReason === "SAFETY") {
+                           console.warn(`API Warning (${stepName}): Response stopped due to SAFETY. Ratings:`, candidate.safetyRatings);
+                           return { text: "(My response was withheld due to safety concerns. Please try a different topic or phrasing.)", safetyBlocked: true };
+                      }
+
+                     // **Check Content**: Ensure content and parts exist
+                     if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0 || !candidate.content.parts[0].text) {
+                         // If finishReason is RECITATION, it might mean the model tried to quote too much source material.
+                         if (candidate.finishReason === "RECITATION") {
+                             console.warn(`API Warning (${stepName}): Response potentially blocked due to recitation.`);
+                             return { error: `API Error (${stepName}): Response generation stopped, possibly due to excessive recitation.` };
+                         }
+                         console.error(`API Error (${stepName}): Invalid response structure or empty text content. Finish Reason: ${candidate.finishReason}. Candidate:`, candidate);
+                         return { error: `API Error (${stepName}): Received an unexpected or empty response content from the AI (Finish Reason: ${candidate.finishReason || 'N/A'}).` };
+                     }
+
+                     // **Success Case**: Extract text
+                     let text = candidate.content.parts[0].text.trim();
+
+                     // Append truncation warning if needed
+                     if (candidate.finishReason === "MAX_TOKENS") {
+                         console.warn(`API Warning (${stepName}): Response truncated due to MAX_TOKENS.`);
+                         text += "... (message truncated)";
+                     } else if (candidate.finishReason !== "STOP" && candidate.finishReason !== "UNSPECIFIED" && candidate.finishReason !== undefined) {
+                          console.warn(`API Warning (${stepName}): Unexpected finish reason: ${candidate.finishReason}.`);
+                     }
+
+                     return { text: text };
+
+
+                 } catch (error) {
+                     if (error.name === 'AbortError') {
+                         console.log(`DEBUG: ${stepName} - Fetch aborted.`);
+                         return { error: "Request cancelled.", aborted: true };
+                     }
+                     console.error(`Network/Fetch Error (${stepName}):`, error);
+                     return { error: `Network Error (${stepName}): ${error.message}. Please check your connection.` };
+                 } finally {
+                     // Clear the controller once done or aborted
+                     if (currentAbortController?.signal === signal) {
+                         currentAbortController = null;
+                     }
+                 }
+            }
+
+
+            // --- Core Logic: Multi-Step AI Processing ---
+            async function processUserMessage(userMessageContent) {
+                 console.log("DEBUG: processUserMessage started.");
+                 if (isProcessing) {
+                     console.warn("DEBUG: processUserMessage skipped - already processing.");
+                     updateStatus("Please wait for the current response.", false);
+                     return;
+                 }
+                 if (!apiKey) {
+                     addMessage("Cannot process message: API Key is missing.", 'error');
+                     updateStatus("API Key Required!", true);
+                     return;
+                 }
+
+                 isProcessing = true;
+                 disableInput('processUserMessage start');
+                 updateStatus("Thinking...", false, true); // Active status
+
+                 // --- Name Handling Logic ---
+                 let justAskedForName = false; // Track if the *previous* turn asked for name
+                 if (conversationHistory.length >= 2) {
+                     const lastBotMessage = conversationHistory[conversationHistory.length - 1].parts[0].text;
+                     // Simple check if the last bot message likely asked for name
+                     if (lastBotMessage.toLowerCase().includes("by what name")) {
+                         justAskedForName = true;
+                     }
+                 }
+
+                 // If the last turn asked for name, try to capture it from current input
+                 if (justAskedForName && !userName) {
+                     const potentialName = userMessageContent.trim();
+                     // Very basic heuristic: short, likely capitalized, not a question
+                     if (potentialName.length > 0 && potentialName.length < 30 && !potentialName.includes('?') && potentialName.match(/^[A-Z]/)) {
+                         userName = potentialName.split(' ')[0]; // Take first word
+                         console.log(`DEBUG: Attempted to capture name: ${userName}`);
+                         // Optional: Add a confirmation message later? For now, just store it.
+                     } else {
+                         console.log("DEBUG: User response didn't look like a name after being asked.");
+                         // Didn't get a name, don't ask again immediately.
+                     }
+                     // We've processed the response to the name question, don't check again immediately
+                     justAskedForName = false;
+                 }
+                 // --- End Name Handling Logic ---
+
+
+                 // Add user message to chat log and history *after* potential name capture check
+                 addMessage(userMessageContent, 'user');
+                 const userTurn = { role: "user", parts: [{ text: userMessageContent }] };
+                 conversationHistory.push(userTurn); // Add user turn immediately
+
+
+                 const loadingElement = showLoadingIndicator("Seeking wisdom...");
+                 if (!loadingElement) {
+                     console.error("DEBUG: Failed to show loading indicator.");
+                     updateStatus("UI Error displaying status.", true);
+                     isProcessing = false;
+                     enableInput('processUserMessage loading fail');
+                     conversationHistory.pop(); // Remove user turn if loading fails
+                     return;
+                 }
+
+                 // Prepare history, limiting its length
+                 const historyForAPI = formatHistoryForGemini(
+                     conversationHistory.slice(-MAX_HISTORY_TURNS * 2) // Include user's latest message
+                 );
+
+                 let draftResponse = "", critique = "", finalResponse = "", errorMessage = null, success = false;
+                 let shouldAskForName = !userName && !askedForName && conversationHistory.length <= 2; // Ask on first/second turn if name unknown
+
+                 try {
+                     // --- Step 1: Draft ---
+                     updateLoadingMessage(loadingElement, "Drafting guidance...");
+                     let drafterInstruction = getDrafterSystemInstruction();
+                     // Modify prompt slightly if we need to ask for name *now*
+                     if (shouldAskForName) {
+                         console.log("DEBUG: Modifying drafter prompt to ask for name.");
+                         // The base prompt already includes instructions to ask if needed,
+                         // but we set the flag here to confirm it happened.
+                         askedForName = true; // Mark that we are asking now
+                     }
+                     const contentsForDrafter = [
+                         drafterInstruction, // Get instruction with current name state
+                         ...historyForAPI // History including the latest user message
+                     ];
+                     const draftData = await callGeminiAPI(contentsForDrafter, MAX_TOKENS_DRAFT, 0.7, "Draft");
+                     if (draftData.error) throw new Error(`Draft Step: ${draftData.error}`);
+                     if (draftData.aborted) throw new Error("Request cancelled.");
+                     draftResponse = draftData.text;
+                     console.log("DEBUG: Draft Response:", draftResponse.substring(0, 100) + "...");
+
+                     // --- Step 2: Critique ---
+                     updateLoadingMessage(loadingElement, "Reviewing guidance...");
+                     const criticInputText = `User Query: ${userMessageContent}\nDraft Response: ${draftResponse}`;
+                     const contentsForCritic = [
+                         getCriticSystemInstruction(), // Get instruction with current name state
+                         { role: "user", parts: [{ text: criticInputText }] }
+                     ];
+                     const critiqueData = await callGeminiAPI(contentsForCritic, MAX_TOKENS_CRITIQUE, 0.3, "Critique");
+                     if (critiqueData.error) throw new Error(`Critique Step: ${critiqueData.error}`);
+                     if (critiqueData.aborted) throw new Error("Request cancelled.");
+                     critique = critiqueData.text;
+                     console.log("DEBUG: Critique:", critique);
+
+                     // --- Step 3: Refine ---
+                     if (critique.trim().startsWith("Critique: None.")) {
+                         console.log("DEBUG: Critique passed, using draft as final response.");
+                         finalResponse = draftResponse;
+                         success = true;
+                     } else {
+                         updateLoadingMessage(loadingElement, "Refining message...");
+                         const refinerInputText = `User Query: ${userMessageContent}\nDraft Response: ${draftResponse}\nCritique and Suggestions: ${critique}`;
+                         const contentsForRefiner = [
+                             getRefinerSystemInstruction(), // Get instruction with current name state
+                             { role: "user", parts: [{ text: refinerInputText }] }
+                         ];
+                         const refineData = await callGeminiAPI(contentsForRefiner, MAX_TOKENS_REFINE, 0.6, "Refine");
+                         if (refineData.error) throw new Error(`Refine Step: ${refineData.error}`);
+                         if (refineData.aborted) throw new Error("Request cancelled.");
+                         finalResponse = refineData.text;
+                         console.log("DEBUG: Refined Response:", finalResponse.substring(0, 100) + "...");
+                         success = true;
+                     }
+
+                 } catch (error) {
+                     console.error("DEBUG: Error in LLM chain:", error);
+                     errorMessage = error.message || "An unexpected error occurred during processing.";
+                     // Remove "Step: " prefix if present for cleaner user message
+                     errorMessage = errorMessage.replace(/^(Draft|Critique|Refine)\sStep:\s*/, '');
+                     success = false;
+                     // Roll back asking-for-name flag if we failed before sending response
+                     if (shouldAskForName) askedForName = false;
+
+                 } finally {
+                     console.log(`DEBUG: Chain 'finally' block. Success: ${success}`);
+                     removeLoadingIndicator(); // Always remove indicator
+
+                     if (success && finalResponse) {
+                         // Add the successful bot response to chat and history
+                         addMessage(finalResponse, 'bot');
+                         const modelTurn = { role: "model", parts: [{ text: finalResponse }] };
+                         conversationHistory.push(modelTurn); // Add bot response to history
+
+                         // Prune history if it exceeds the limit
+                         const maxHistoryItems = MAX_HISTORY_TURNS * 2; // user + model pairs
+                         if (conversationHistory.length > maxHistoryItems) {
+                             conversationHistory = conversationHistory.slice(-maxHistoryItems);
+                             console.log("DEBUG: Pruned conversation history.");
+                         }
+                         updateStatus("Ready."); // Clear status
+
+                     } else {
+                         // Handle failure: Display error message in chat
+                         const displayError = errorMessage || "An unknown error occurred.";
+                         addMessage(displayError, 'error'); // Display the error in the chat
+                         updateStatus("Error occurred.", true);
+
+                         // Remove the user turn from history ONLY if no bot response was added at all
+                          if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1] === userTurn) {
+                             conversationHistory.pop();
+                             console.log("DEBUG: Removed user turn from history due to processing failure.");
+                         }
+                     }
+
+                     isProcessing = false; // Mark processing as finished
+                     enableInput('processUserMessage finally'); // Re-enable input fields
+                     userInput.focus(); // Focus input for next message
+                 }
+            }
+
+            // --- Event Handlers ---
+            function handleSendMessage() {
+                 console.log("DEBUG: handleSendMessage called.");
+                 if (isProcessing) {
+                     console.warn("DEBUG: Send blocked - AI is processing.");
+                     updateStatus("Please wait for the response.", false);
+                     return;
+                 }
+                 const userText = userInput.value.trim();
+                 if (userText === "") {
+                     console.log("DEBUG: Send blocked - empty input.");
+                     return;
+                 }
+                 if (!apiKey) {
+                     console.warn("DEBUG: Send blocked - no API key.");
+                     addMessage("API Key required to send messages.", 'error');
+                     updateStatus("API Key Required!", true);
+                     return;
+                 }
+
+                 // Clear input *before* processing starts
+                 userInput.value = "";
+                 sendButton.disabled = true; // Disable send button immediately
+
+                 // Start processing the message
+                 processUserMessage(userText);
+             }
+
+             function handleMicClick() {
+                console.log("DEBUG: handleMicClick called.");
+                if (!isSpeechRecognitionApiAvailable) {
+                    updateStatus("Voice input not supported by this browser.", true);
+                    micButton.disabled = true; // Permanently disable if not supported
+                    return;
+                }
+                if (isProcessing) {
+                    updateStatus("Please wait for the current response.", false);
+                    return;
+                }
+                 if (!apiKey) {
+                     addMessage("API Key required for voice input.", 'error');
+                     updateStatus("API Key Required!", true);
+                     return;
+                 }
+
+                if (isListening) {
+                    try {
+                        console.log("DEBUG: Attempting to stop voice recognition via button.");
+                        recognition.stop();
+                        // onend handler will update state and UI
+                    } catch(e) {
+                        console.error("DEBUG: Error stopping recognition:", e);
+                        updateStatus("Mic stop error.", true);
+                        // Force UI update if stop fails badly
+                        isListening = false;
+                        micButton.classList.remove('listening');
+                        micButton.title = "Speak Input (Requires Permission)";
+                        enableInput('mic stop error');
+                    }
+                } else {
+                    // Request permission if needed (often handled implicitly by browser on first .start())
+                    try {
+                        console.log("DEBUG: Attempting to start voice recognition.");
+                        recognition.start();
+                        // onstart handler will update state and UI
+                    } catch(e) {
+                        // Common error: recognition already started
+                        if (e.name === 'InvalidStateError') {
+                             console.warn("DEBUG: Recognition start called when already started?");
+                             // Don't show error to user, maybe just log it.
+                        } else {
+                            console.error("DEBUG: Error starting recognition:", e.name, e.message);
+                            updateStatus(`Mic start error: ${e.message}`, true);
+                            // Ensure UI reflects non-listening state
+                            isListening = false;
+                            micButton.classList.remove('listening');
+                            micButton.title = "Speak Input (Requires Permission)";
+                            enableInput('mic start error');
+                        }
+                    }
+                }
+             }
+
+             function handleSpeakerToggle() {
+                console.log("DEBUG: handleSpeakerToggle called.");
+                isVoiceOutputEnabled = !isVoiceOutputEnabled;
+                updateSpeakerButtonVisuals();
+                if (!isVoiceOutputEnabled && synth && (synth.speaking || synth.pending)) {
+                    console.log("DEBUG: Cancelling ongoing/pending speech synthesis due to toggle off.");
+                    synth.cancel(); // Stop any ongoing speech
+                }
+                updateStatus(isVoiceOutputEnabled ? "Voice output enabled." : "Voice output disabled.");
+             }
+
+             function updateSpeakerButtonVisuals() {
+                 if (!speakerToggleButton || !speakerOnIcon || !speakerOffIcon) return;
+                 const isActive = isVoiceOutputEnabled;
+                 speakerToggleButton.classList.toggle('active', isActive);
+                 speakerOnIcon.style.display = isActive ? 'block' : 'none';
+                 speakerOffIcon.style.display = isActive ? 'none' : 'block';
+                 speakerToggleButton.title = isActive ? "Disable Voice Output" : "Enable Voice Output";
+                 speakerToggleButton.disabled = !isSpeechSynthesisApiAvailable; // Disable if not supported
+             }
+
+            // --- Speech Synthesis Implementation ---
+            function setupSpeechSynthesis() {
+                console.log("DEBUG: Setting up Speech Synthesis...");
+                if (!isSpeechSynthesisApiAvailable) {
+                    console.warn("Speech Synthesis not supported by this browser.");
+                    updateStatus("Voice output not available.", false);
+                    isVoiceOutputEnabled = false; // Ensure it's off
+                    if(speakerToggleButton) speakerToggleButton.disabled = true; // Disable button
+                    return;
+                }
+
+                // Attempt to load voices. This can be tricky due to async loading.
+                function populateVoiceList() {
+                    try {
+                        voices = synth.getVoices();
+                        if (voices.length === 0 && 'onvoiceschanged' in synth) { // Check if event exists
+                            console.warn("DEBUG: synth.getVoices() returned empty list. Waiting for onvoiceschanged.");
+                            return; // Wait for onvoiceschanged if list is initially empty and event is supported
+                        }
+                         if (voices.length === 0) {
+                            console.error("DEBUG: synth.getVoices() returned empty list and onvoiceschanged event may not be reliable/supported. Synthesis might fail.");
+                            // Proceed with caution, might not find voices.
+                        }
+
+                        console.log(`DEBUG: Voices available: ${voices.length}`);
+                        // voices.forEach(v => console.log(` - ${v.name} (${v.lang}) ${v.localService ? '[Local]' : '[Remote]'} ${v.default ? '[Default]' : ''}`));
+
+
+                        // --- Refined Voice Selection Logic ---
+                        preferredVoice = voices.find(voice => voice.lang.startsWith('en') && voice.name.includes('Google') && !voice.localService) || // Prefer Google remote English
+                                        voices.find(voice => voice.lang.startsWith('en') && !voice.localService) || // Prefer any remote English
+                                        voices.find(voice => voice.lang.startsWith('en') && voice.name.includes('Google')) || // Prefer Google local English
+                                        voices.find(voice => voice.lang.startsWith('en') && voice.default) || // Prefer default English
+                                        voices.find(voice => voice.lang.startsWith('en')) || // Prefer any English
+                                        voices.find(voice => voice.default); // Fallback to overall default
+
+                        if (preferredVoice) {
+                            console.log(`DEBUG: Preferred voice selected: ${preferredVoice.name} (${preferredVoice.lang})`);
+                        } else if (voices.length > 0) {
+                            preferredVoice = voices[0]; // Absolute fallback to the first voice
+                            console.warn(`DEBUG: Could not find a preferred English voice. Falling back to: ${preferredVoice.name} (${preferredVoice.lang})`);
+                        } else {
+                             console.error("DEBUG: No voices available in the system.");
+                             updateStatus("No speech voices found.", true);
+                             isSpeechSynthesisApiAvailable = false; // Mark as unavailable
+                             if(speakerToggleButton) speakerToggleButton.disabled = true;
+                        }
+                    } catch (error) {
+                        console.error("DEBUG: Error during populateVoiceList:", error);
+                        updateStatus("Error getting speech voices.", true);
+                        isSpeechSynthesisApiAvailable = false;
+                         if(speakerToggleButton) speakerToggleButton.disabled = true;
+                    }
+                }
+
+                // Need to handle the possibility that getVoices() is initially empty and relies on the event
+                if ('onvoiceschanged' in synth) {
+                    synth.onvoiceschanged = populateVoiceList;
+                }
+
+                // Call it once initially. If voices are loaded synchronously, this works.
+                // If not, onvoiceschanged will handle it later (if supported).
+                populateVoiceList();
+                console.log("DEBUG: Speech Synthesis setup attempted.");
+
+            }
+
+            function speak(text) {
+                if (!isSpeechSynthesisApiAvailable || !isVoiceOutputEnabled || !synth || !text) {
+                    // console.log("DEBUG: Speak skipped. Available:", isSpeechSynthesisApiAvailable, "Enabled:", isVoiceOutputEnabled, "Synth:", !!synth, "Text:", !!text);
+                    return; // Don't speak if disabled, not supported, or no text
+                }
+
+                // Cancel any currently speaking utterance before starting a new one
+                if (synth.speaking || synth.pending) { // Check pending queue too
+                    console.log("DEBUG: Cancelling previous/pending speech before speaking new text.");
+                    synth.cancel();
+                }
+
+                // Clean text for speech (remove HTML tags like the sanskrit span)
+                const cleanText = text.replace(/<[^>]*>/g, '');
+                if (!cleanText) {
+                     console.log("DEBUG: Speak skipped, text was empty after tag removal.");
+                     return; // Don't speak if only tags were present
+                }
+
+
+                const utterance = new SpeechSynthesisUtterance(cleanText);
+
+                // Assign preferred voice if found
+                if (preferredVoice) {
+                    utterance.voice = preferredVoice;
+                     // console.log(`DEBUG: Using voice: ${preferredVoice.name}`);
+                } else {
+                     console.warn("DEBUG: Speaking with default system voice as preferred was not set or found.");
+                }
+
+                // Optional: Adjust pitch and rate if desired
+                utterance.pitch = 1.0; // 0 to 2
+                utterance.rate = 1.0; // 0.1 to 10 (1 is default)
+
+                utterance.onstart = () => {
+                    console.log("DEBUG: Speech synthesis started for:", cleanText.substring(0,30)+"...");
+                    // Optionally indicate speaking state visually
+                };
+
+                utterance.onend = () => {
+                    console.log("DEBUG: Speech synthesis finished.");
+                };
+
+                utterance.onerror = (event) => {
+                    console.error("Speech Synthesis Error:", event.error, "for utterance:", utterance);
+                    updateStatus(`Speech error: ${event.error}`, true);
+                    // Attempt to clear queue on error? Might be too aggressive.
+                    // synth.cancel();
+                };
+
+                // Delay slightly - helps prevent issues where 'cancel' hasn't fully processed, especially on some browsers.
+                setTimeout(() => {
+                    try {
+                        console.log("DEBUG: Calling synth.speak().");
+                        synth.speak(utterance);
+                    } catch (error) {
+                         console.error("DEBUG: Error calling synth.speak():", error);
+                         updateStatus(`Speech error: ${error.message}`, true);
+                    }
+                }, 100); // Increased delay slightly to 100ms
+            }
+
+
+            // --- Speech Recognition Implementation ---
+            function setupSpeechRecognition() {
+                console.log("DEBUG: Setting up Speech Recognition...");
+                if (!isSpeechRecognitionApiAvailable) {
+                    console.warn("Speech Recognition not supported by this browser.");
+                    updateStatus("Voice input not available.", false);
+                    if(micButton) micButton.disabled = true; // Disable button
+                    return;
+                }
+
+                try {
+                    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    recognition = new SpeechRecognition();
+
+                    recognition.continuous = false; // Stop after first pause/result
+                    recognition.lang = 'en-US'; // Set language - BCP 47 format. Could be made configurable later.
+                    recognition.interimResults = true; // Show results as they come in
+                    recognition.maxAlternatives = 1; // Get only the top result
+
+                    recognition.onstart = () => {
+                        console.log("DEBUG: Voice recognition started.");
+                        isListening = true;
+                        micButton.classList.add('listening');
+                        micButton.title = "Stop Listening";
+                        updateStatus("Listening...", false, true);
+                        disableInput('mic start'); // Disable text input while listening
+                    };
+
+                    recognition.onresult = (event) => {
+                        let interimTranscript = '';
+                        let finalTranscript = '';
+
+                        for (let i = event.resultIndex; i < event.results.length; ++i) {
+                            if (event.results[i].isFinal) {
+                                finalTranscript += event.results[i][0].transcript;
+                            } else {
+                                interimTranscript += event.results[i][0].transcript;
+                            }
+                        }
+                        // console.log("DEBUG: Interim:", interimTranscript, "Final:", finalTranscript);
+
+                        // Update input field with interim results for feedback
+                        userInput.value = finalTranscript + interimTranscript;
+                        sendButton.disabled = !userInput.value.trim(); // Enable/disable send based on content
+
+                        // If we have a final transcript, process it
+                        if (finalTranscript) {
+                            console.log("DEBUG: Final transcript received:", finalTranscript);
+                            userInput.value = finalTranscript.trim(); // Set final value
+                            // recognition.stop(); // Stop listening - onspeechend or onend usually handles this better
+                            // Don't automatically send, let user press send or Enter
+                        }
+                    };
+
+                    recognition.onspeechend = () => {
+                        console.log("DEBUG: Speech ended, recognition service processing...");
+                        // The service might take a moment to finalize the result after speech ends.
+                        // Let onresult handle the final transcript. Stop might be too early here.
+                        // recognition.stop();
+                    };
+
+                    recognition.onend = () => {
+                        console.log("DEBUG: Voice recognition ended.");
+                        // Check if still processing AI response before resetting status/enabling input fully
+                        if (!isProcessing) {
+                            updateStatus("Ready.");
+                            enableInput('mic end'); // Re-enable input fields
+                            if (document.activeElement !== userInput) {
+                                userInput.focus();
+                            }
+                        } else {
+                             updateStatus("Thinking..."); // Keep thinking status if AI is busy
+                             // Keep input disabled if AI is processing
+                        }
+                         isListening = false;
+                         micButton.classList.remove('listening');
+                         micButton.title = "Speak Input (Requires Permission)";
+                    };
+
+
+                    recognition.onerror = (event) => {
+                        console.error("Speech Recognition Error:", event.error, "Message:", event.message);
+                        let errorMsg = `Speech error: ${event.error}`;
+                        if (event.error === 'no-speech') {
+                            errorMsg = "No speech detected. Please try again.";
+                        } else if (event.error === 'audio-capture') {
+                            errorMsg = "Audio capture failed. Check microphone/permissions.";
+                        } else if (event.error === 'not-allowed') {
+                            errorMsg = "Mic permission denied. Please allow in browser settings.";
+                            // Try to guide the user slightly more
+                            alert("Microphone permission was denied. Please enable it in your browser's site settings and reload the page if you want to use voice input.");
+                        } else if (event.error === 'aborted') {
+                             // Don't show error for manual stop, just log it.
+                            console.log("DEBUG: Speech recognition aborted (likely manual stop).");
+                            errorMsg = ""; // Clear message for manual abort
+                        } else if (event.error === 'network') {
+                             errorMsg = "Network error during speech recognition.";
+                        } else if (event.error === 'service-not-allowed') {
+                             errorMsg = "Speech service denied. Check browser/OS settings.";
+                        } else {
+                             errorMsg = `Speech error: ${event.error}. ${event.message || ''}`;
+                        }
+
+                        if (errorMsg) { // Only update status if there's an actual error message
+                            updateStatus(errorMsg, true);
+                        }
+
+                        // Ensure state is reset if an error occurs mid-listening
+                        if (isListening) {
+                            isListening = false;
+                            micButton.classList.remove('listening');
+                            micButton.title = "Speak Input (Requires Permission)";
+                            enableInput('mic error'); // Try to re-enable input after error
+                        }
+                    };
+
+                    // Initial state: Mic enabled if available
+                    if (micButton) micButton.disabled = false;
+                    console.log("DEBUG: Speech Recognition setup complete.");
+
+                } catch (error) {
+                     console.error("DEBUG: Error initializing SpeechRecognition object:", error);
+                     updateStatus("Failed to initialize voice input.", true);
+                     isSpeechRecognitionApiAvailable = false;
+                     if(micButton) micButton.disabled = true;
+                }
+            }
+
+            // --- API Key Handling ---
+            function promptAndSetApiKey() {
+                console.log("DEBUG: promptAndSetApiKey called.");
+                const keyFromStorage = localStorage.getItem('innerCharioteerApiKey');
+                apiKey = null; // Reset key first
+
+                if (keyFromStorage) {
+                    console.log("DEBUG: Found key in localStorage.");
+                    apiKey = keyFromStorage;
+                } else {
+                    const promptedKey = prompt(
+                        "Google AI Studio API Key Required:\n\n" +
+                        "Get a free key at aistudio.google.com/app/apikey\n" +
+                        "This key will be stored locally in your browser's localStorage for convenience.\n" +
+                        "WARNING: This is not secure for production apps.\n\n" +
+                        "Enter your API Key:"
+                    );
+                    if (promptedKey && promptedKey.trim().length > 10) { // Basic validation
+                        apiKey = promptedKey.trim();
+                        try {
+                            localStorage.setItem('innerCharioteerApiKey', apiKey);
+                            console.log("DEBUG: API Key saved to localStorage.");
+                        } catch (storageError) {
+                            console.warn("DEBUG: Couldn't save API Key to localStorage:", storageError);
+                            alert("Warning: Could not save API Key to local storage. You may need to enter it again next time.");
+                        }
+                    }
+                }
+
+                if (!apiKey) {
+                    console.error("DEBUG: API Key is missing or invalid.");
+                    addMessage("A valid Google AI Studio API Key is required for Inner Charioteer to function. Please reload the page and provide one when prompted.", 'error');
+                    updateStatus("API Key Required! Reload.", true);
+                    disableInput('init no key'); // Disable input if no key
+                    return false; // Indicate failure
+                } else {
+                    console.log("DEBUG: API Key is set.");
+                    updateStatus("API Key Loaded.");
+                    return true; // Indicate success
+                }
+            }
+
+            // --- Initialization Function ---
+            function initializeApp() {
+                 console.log("DEBUG: initializeApp executing...");
+                 updateStatus("Initializing...");
+
+                 // Setup speech APIs first - they update their respective available flags
+                 setupSpeechSynthesis();
+                 setupSpeechRecognition();
+
+                 // Attach core event listeners
+                 sendButton.addEventListener('click', handleSendMessage);
+                 userInput.addEventListener('keypress', (event) => {
+                     // Send on Enter key, unless Shift is pressed (for potential multi-line input later)
+                     if (event.key === 'Enter' && !event.shiftKey && !userInput.disabled) {
+                         event.preventDefault(); // Prevent default newline insertion
+                         handleSendMessage();
+                     }
+                 });
+                 // Only add mic listener if API is available
+                 if(isSpeechRecognitionApiAvailable && micButton) {
+                    micButton.addEventListener('click', handleMicClick);
+                 } else if (micButton) {
+                    micButton.disabled = true; // Ensure it's disabled if API not available
+                 }
+                 // Only add speaker listener if API is available
+                 if(isSpeechSynthesisApiAvailable && speakerToggleButton) {
+                    speakerToggleButton.addEventListener('click', handleSpeakerToggle);
+                 } else if (speakerToggleButton) {
+                    speakerToggleButton.disabled = true; // Ensure it's disabled if API not available
+                 }
+
+                 console.log("DEBUG: Core event listeners attached.");
+
+                 // Handle API Key
+                 const keyAcquired = promptAndSetApiKey();
+
+                 updateSpeakerButtonVisuals(); // Set initial speaker icon state based on availability flag
+
+                 if (keyAcquired) {
+                     // Initial message slightly adjusted for the refined persona
+                     addMessage("Observe the field of life before you. Share your thoughts, or ask what weighs upon your mind.", "bot");
+                     enableInput('init success'); // Enable input now that key is confirmed
+                     userInput.focus();
+                     updateStatus("Ready.");
+                 } else {
+                     // Status already set by promptAndSetApiKey if failed
+                     console.log("DEBUG: Initialization halted due to missing API key.");
+                 }
+
+                 // Disable send button initially as input is empty
+                 sendButton.disabled = true;
+
+                 console.log("DEBUG: Initialization sequence complete.");
+             }
+
+            // --- Start the Application ---
+            initializeApp();
+
+        }); // End DOMContentLoaded
+    </script>
+</body>
+</html>
